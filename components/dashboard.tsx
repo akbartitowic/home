@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, HardDrive, MemoryStick, Network, RefreshCcw, Server } from "lucide-react";
+import { Activity, HardDrive, MemoryStick, Monitor, Moon, Network, RefreshCcw, Server, Sun } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,16 @@ const fallbackData: MetricsResponse = {
   cpu: { usagePercent: 0, tempC: null },
   memory: { usedBytes: 0, totalBytes: 1 },
   disk: { usedBytes: 0, totalBytes: 1, availableBytes: 0, mountpoint: "/", filesystem: "-" },
+  disks: [],
+  gpu: {
+    vendor: "Unknown",
+    model: "GPU not detected",
+    usagePercent: null,
+    memoryUsedMiB: null,
+    memoryTotalMiB: null,
+    temperatureC: null,
+    available: false,
+  },
   network: { downloadMbps: 0, uploadMbps: 0, latencyMs: 0 },
   services: [],
 };
@@ -46,6 +56,16 @@ export function Dashboard() {
   const [metrics, setMetrics] = useState<MetricsResponse>(fallbackData);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"live" | "fallback">("live");
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.remove("dark", "light");
+    document.documentElement.classList.add(theme);
+  }, [theme]);
 
   const fetchMetrics = useCallback(async () => {
     try {
@@ -88,6 +108,10 @@ export function Dashboard() {
           <Badge className={source === "live" ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300"}>
             {source === "live" ? "Data live" : "Fallback"}
           </Badge>
+          <Button onClick={toggleTheme} type="button">
+            {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+            {theme === "dark" ? "Light" : "Dark"}
+          </Button>
           <Button onClick={fetchMetrics} disabled={loading}>
             <RefreshCcw className="mr-2 h-4 w-4" />
             Refresh
@@ -140,9 +164,58 @@ export function Dashboard() {
             <p>Latency: <span className="text-muted-foreground">{metrics.network.latencyMs.toFixed(1)} ms</span></p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground"><Monitor className="h-4 w-4" />VGA / GPU</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            <p className="truncate" title={metrics.gpu.model}>{metrics.gpu.model}</p>
+            <p>
+              Usage: <span className="text-muted-foreground">{metrics.gpu.usagePercent !== null ? `${metrics.gpu.usagePercent.toFixed(1)}%` : "-"}</span>
+            </p>
+            <p>
+              VRAM: <span className="text-muted-foreground">
+                {metrics.gpu.memoryUsedMiB !== null && metrics.gpu.memoryTotalMiB !== null
+                  ? `${metrics.gpu.memoryUsedMiB} / ${metrics.gpu.memoryTotalMiB} MiB`
+                  : "-"}
+              </span>
+            </p>
+            <p>
+              Temp: <span className="text-muted-foreground">{metrics.gpu.temperatureC !== null ? `${metrics.gpu.temperatureC} C` : "-"}</span>
+            </p>
+          </CardContent>
+        </Card>
       </section>
 
-      <section className="mt-4 grid gap-4 md:grid-cols-2">
+      <section className="mt-4 grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground"><HardDrive className="h-4 w-4" />Semua Partisi Storage</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {metrics.disks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Tidak ada data partisi.</p>
+            ) : (
+              metrics.disks.map((partition) => {
+                const usagePct = partition.totalBytes > 0 ? (partition.usedBytes / partition.totalBytes) * 100 : 0;
+                return (
+                  <div key={`${partition.filesystem}-${partition.mountpoint}`} className="rounded-md border border-border p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                      <span className="truncate font-medium">{partition.mountpoint}</span>
+                      <span className="text-muted-foreground">{partition.filesystem}</span>
+                    </div>
+                    <Progress value={usagePct} />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Used {formatBytes(partition.usedBytes)} / {formatBytes(partition.totalBytes)} | Sisa {formatBytes(partition.availableBytes)}
+                    </p>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground"><Server className="h-4 w-4" />Server Info</CardTitle>
@@ -157,7 +230,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-sm text-muted-foreground">Service Health</CardTitle>
           </CardHeader>

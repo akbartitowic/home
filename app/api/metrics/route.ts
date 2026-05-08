@@ -14,33 +14,72 @@ type DiskStats = {
   availableBytes: number;
 };
 
-function parseDfOutput(stdout: string): DiskStats {
+type GpuStats = {
+  vendor: string;
+  model: string;
+  usagePercent: number | null;
+  memoryUsedMiB: number | null;
+  memoryTotalMiB: number | null;
+  temperatureC: number | null;
+  available: boolean;
+};
+
+function parseDfOutput(stdout: string): DiskStats[] {
   const lines = stdout.trim().split("\n");
-  const dataLine = lines[lines.length - 1] ?? "";
-  const parts = dataLine.trim().split(/\s+/);
-  if (parts.length < 6) {
+  if (lines.length < 2) {
     throw new Error("Unable to parse disk usage from df");
   }
 
-  const filesystem = parts[0];
-  const totalKB = Number(parts[1]);
-  const usedKB = Number(parts[2]);
-  const availableKB = Number(parts[3]);
-  const mountpoint = parts[5];
-
-  return {
-    filesystem,
-    mountpoint,
-    totalBytes: totalKB * 1024,
-    usedBytes: usedKB * 1024,
-    availableBytes: availableKB * 1024,
-  };
+  const dataLines = lines.slice(1);
+  return dataLines
+    .map((line) => line.trim().split(/\s+/))
+    .filter((parts) => parts.length >= 6)
+    .map((parts) => ({
+      filesystem: parts[0],
+      totalBytes: Number(parts[1]) * 1024,
+      usedBytes: Number(parts[2]) * 1024,
+      availableBytes: Number(parts[3]) * 1024,
+      mountpoint: parts[5],
+    }));
 }
 
-async function getDiskStats(): Promise<DiskStats> {
-  const targetPath = process.env.DISK_TARGET_PATH || "/";
-  const { stdout } = await execFile("df", ["-kP", targetPath]);
+async function getDiskStats(): Promise<DiskStats[]> {
+  const { stdout } = await execFile("df", ["-kP"]);
   return parseDfOutput(stdout);
+}
+
+async function getGpuStats(): Promise<GpuStats> {
+  try {
+    const { stdout } = await execFile("nvidia-smi", [
+      "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+      "--format=csv,noheader,nounits",
+    ]);
+    const firstLine = stdout.trim().split("\n")[0];
+    if (!firstLine) throw new Error("No GPU rows");
+    const [name, utilization, memoryUsed, memoryTotal, temperature] = firstLine
+      .split(",")
+      .map((item) => item.trim());
+
+    return {
+      vendor: "NVIDIA",
+      model: name || "Unknown GPU",
+      usagePercent: Number.isFinite(Number(utilization)) ? Number(utilization) : null,
+      memoryUsedMiB: Number.isFinite(Number(memoryUsed)) ? Number(memoryUsed) : null,
+      memoryTotalMiB: Number.isFinite(Number(memoryTotal)) ? Number(memoryTotal) : null,
+      temperatureC: Number.isFinite(Number(temperature)) ? Number(temperature) : null,
+      available: true,
+    };
+  } catch {
+    return {
+      vendor: "Unknown",
+      model: "GPU not detected",
+      usagePercent: null,
+      memoryUsedMiB: null,
+      memoryTotalMiB: null,
+      temperatureC: null,
+      available: false,
+    };
+  }
 }
 
 async function getCpuUsagePercent() {
@@ -66,10 +105,15 @@ async function getCpuUsagePercent() {
 
 export async function GET() {
   try {
-    const [disk, cpuPercent] = await Promise.all([getDiskStats(), getCpuUsagePercent()]);
+    const [disks, cpuPercent, gpu] = await Promise.all([getDiskStats(), getCpuUsagePercent(), getGpuStats()]);
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
+    const rootDisk = disks.find((item) => item.mountpoint === "/") ?? disks[0];
+
+    if (!rootDisk) {
+      throw new Error("No disk partitions detected");
+    }
 
     return NextResponse.json({
       hostname: os.hostname(),
@@ -84,7 +128,9 @@ export async function GET() {
         usedBytes: usedMem,
         totalBytes: totalMem,
       },
-      disk,
+      disk: rootDisk,
+      disks,
+      gpu,
       network: {
         downloadMbps: 0,
         uploadMbps: 0,

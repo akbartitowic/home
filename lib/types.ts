@@ -18,6 +18,22 @@ export type MetricsResponse = {
     mountpoint: string;
     filesystem: string;
   };
+  disks: Array<{
+    usedBytes: number;
+    totalBytes: number;
+    availableBytes: number;
+    mountpoint: string;
+    filesystem: string;
+  }>;
+  gpu: {
+    vendor: string;
+    model: string;
+    usagePercent: number | null;
+    memoryUsedMiB: number | null;
+    memoryTotalMiB: number | null;
+    temperatureC: number | null;
+    available: boolean;
+  };
   network: {
     downloadMbps: number;
     uploadMbps: number;
