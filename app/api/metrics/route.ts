@@ -95,6 +95,37 @@ async function getGpuStats(): Promise<GpuStats> {
       available: true,
     };
   } catch {
+    try {
+      const { stdout } = await execFile("lspci", []);
+      const gpuLine = stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .find(
+          (line) =>
+            line.includes("VGA compatible controller") ||
+            line.includes("3D controller") ||
+            line.includes("Display controller"),
+        );
+
+      if (!gpuLine) throw new Error("GPU line not found");
+      const model = gpuLine.replace(/^[0-9a-fA-F:.]+\s+/, "");
+      const lowerModel = model.toLowerCase();
+      let vendor = "Unknown";
+      if (lowerModel.includes("nvidia")) vendor = "NVIDIA";
+      else if (lowerModel.includes("amd") || lowerModel.includes("advanced micro devices") || lowerModel.includes("radeon"))
+        vendor = "AMD";
+      else if (lowerModel.includes("intel")) vendor = "Intel";
+
+      return {
+        vendor,
+        model,
+        usagePercent: null,
+        memoryUsedMiB: null,
+        memoryTotalMiB: null,
+        temperatureC: null,
+        available: true,
+      };
+    } catch {
     return {
       vendor: "Unknown",
       model: "GPU not detected",
@@ -104,6 +135,7 @@ async function getGpuStats(): Promise<GpuStats> {
       temperatureC: null,
       available: false,
     };
+    }
   }
 }
 
