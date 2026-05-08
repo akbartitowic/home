@@ -6,15 +6,6 @@ import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 
 const execFile = promisify(execFileCb);
-const MBPS_DIVISOR = 1024 * 1024;
-
-let lastNetworkSample:
-  | {
-      rxBytes: number;
-      txBytes: number;
-      atMs: number;
-    }
-  | null = null;
 
 type DiskStats = {
   filesystem: string;
@@ -200,22 +191,18 @@ async function getNetworkStats(): Promise<NetworkStats> {
   const latencyMs = await getLatencyMs();
 
   try {
-    const current = await readLinuxNetworkBytes();
-    const now = Date.now();
+    const first = await readLinuxNetworkBytes();
+    const startMs = Date.now();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const second = await readLinuxNetworkBytes();
+    const elapsedSec = Math.max((Date.now() - startMs) / 1000, 1);
+    const rxBytesPerSec = Math.max(second.rxBytes - first.rxBytes, 0) / elapsedSec;
+    const txBytesPerSec = Math.max(second.txBytes - first.txBytes, 0) / elapsedSec;
 
-    if (!lastNetworkSample) {
-      lastNetworkSample = { ...current, atMs: now };
-      return { downloadMbps: 0, uploadMbps: 0, latencyMs };
-    }
-
-    const elapsedSec = Math.max((now - lastNetworkSample.atMs) / 1000, 1);
-    const rxRateBps = Math.max(current.rxBytes - lastNetworkSample.rxBytes, 0) / elapsedSec;
-    const txRateBps = Math.max(current.txBytes - lastNetworkSample.txBytes, 0) / elapsedSec;
-
-    lastNetworkSample = { ...current, atMs: now };
+    // Convert bytes/sec to megabits/sec (Mb/s) for dashboard display.
     return {
-      downloadMbps: Number((rxRateBps / MBPS_DIVISOR).toFixed(2)),
-      uploadMbps: Number((txRateBps / MBPS_DIVISOR).toFixed(2)),
+      downloadMbps: Number(((rxBytesPerSec * 8) / 1_000_000).toFixed(3)),
+      uploadMbps: Number(((txBytesPerSec * 8) / 1_000_000).toFixed(3)),
       latencyMs: Number(latencyMs.toFixed(2)),
     };
   } catch {
