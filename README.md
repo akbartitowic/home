@@ -1,61 +1,47 @@
-# Home Server Dashboard
+# Home Server Dashboard (shadcn style)
 
-Dashboard web ringan untuk memantau performa home server:
+Dashboard monitoring home server berbasis Next.js App Router dengan komponen style shadcn (`Card`, `Badge`, `Button`, `Progress`).
 
-- CPU usage + suhu CPU
-- RAM usage
-- Storage usage + sisa kapasitas
-- Network throughput (download/upload) + latency
-- Status service penting
+## Fitur
 
-## Menjalankan
+- Tampilan UI gaya shadcn
+- CPU usage server (real-time sampling)
+- RAM usage server
+- Storage usage + **sisa SSD/HDD server** dari hasil `df`
+- Network + service health (placeholder, bisa dihubungkan ke exporter kamu)
 
-Karena ini static web, jalankan server file sederhana:
+## Menjalankan Lokal
 
 ```bash
-python3 -m http.server 8080
+npm install
+npm run dev
 ```
 
-Buka:
+Lalu buka `http://localhost:3000`.
 
-`http://localhost:8080`
+## Build Production
 
-## Sumber Data Monitoring
-
-Secara default dashboard mengambil data dari endpoint:
-
-`/api/metrics`
-
-Kalau endpoint itu belum ada, dashboard otomatis fallback ke data mock supaya tampilan tetap jalan.
-
-Kamu bisa ganti endpoint dari URL:
-
-`http://localhost:8080/?endpoint=http://IP_SERVER:PORT/metrics&refreshMs=5000`
-
-## Format JSON Endpoint
-
-Endpoint perlu mengembalikan JSON seperti ini:
-
-```json
-{
-  "hostname": "homeserver.local",
-  "os": "Ubuntu 24.04 LTS",
-  "uptimeSec": 123456,
-  "updatedAt": "2026-05-08T03:00:00.000Z",
-  "cpu": { "usagePercent": 37.5, "tempC": 55.2 },
-  "memory": { "usedBytes": 4294967296, "totalBytes": 17179869184 },
-  "disk": { "usedBytes": 214748364800, "totalBytes": 536870912000 },
-  "network": { "downloadMbps": 200.5, "uploadMbps": 85.3, "latencyMs": 4.2 },
-  "services": [
-    { "name": "Nginx", "status": "healthy" },
-    { "name": "Docker", "status": "healthy" },
-    { "name": "Grafana", "status": "degraded" }
-  ]
-}
+```bash
+npm run build
+npm run start
 ```
 
-Status service yang didukung:
+## Endpoint Metrics Internal
 
-- `healthy`
-- `degraded`
-- `down`
+UI membaca endpoint internal: `GET /api/metrics`.
+
+Endpoint ini menghitung storage langsung dari host server dengan:
+
+```bash
+df -kP <target-path>
+```
+
+Secara default target path adalah `/`.
+
+Kalau storage utama kamu ada di mountpoint lain (misal `/mnt/data`), set env:
+
+```bash
+DISK_TARGET_PATH=/mnt/data
+```
+
+Lalu jalankan ulang app.
