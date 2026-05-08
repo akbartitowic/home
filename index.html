@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Home Server Dashboard</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="container">
+    <header class="topbar">
+      <div>
+        <h1>Home Server Dashboard</h1>
+        <p class="subtitle">Monitoring performa server dan kapasitas storage</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="status-pill" class="pill">Data: Loading...</span>
+        <button id="refresh-btn" class="btn">Refresh</button>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <h2>CPU Usage</h2>
+        <div class="metric-row">
+          <div class="metric-value" id="cpu-value">0%</div>
+          <div class="metric-sub" id="cpu-temp">Temp: -</div>
+        </div>
+        <div class="progress"><div id="cpu-bar"></div></div>
+      </section>
+
+      <section class="card">
+        <h2>Memory (RAM)</h2>
+        <div class="metric-row">
+          <div class="metric-value" id="ram-value">0%</div>
+          <div class="metric-sub" id="ram-used">Used: -</div>
+        </div>
+        <div class="progress"><div id="ram-bar"></div></div>
+      </section>
+
+      <section class="card">
+        <h2>Storage</h2>
+        <div class="metric-row">
+          <div class="metric-value" id="disk-value">0%</div>
+          <div class="metric-sub" id="disk-used">Used: -</div>
+        </div>
+        <div class="progress"><div id="disk-bar"></div></div>
+        <p class="metric-sub success" id="disk-remaining">Sisa: -</p>
+      </section>
+
+      <section class="card">
+        <h2>Network</h2>
+        <div class="metric-sub">Download: <strong id="net-down">-</strong></div>
+        <div class="metric-sub">Upload: <strong id="net-up">-</strong></div>
+        <div class="metric-sub">Latency: <strong id="latency">-</strong></div>
+      </section>
+
+      <section class="card wide">
+        <h2>Service Health</h2>
+        <div id="services-list" class="services-list"></div>
+      </section>
+
+      <section class="card wide">
+        <h2>Data Point Terakhir</h2>
+        <div class="meta-grid">
+          <div>Hostname: <strong id="hostname">-</strong></div>
+          <div>OS: <strong id="os">-</strong></div>
+          <div>Uptime: <strong id="uptime">-</strong></div>
+          <div>Updated: <strong id="updated-at">-</strong></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Endpoint default: <code>/api/metrics</code> (bisa diubah lewat
+        <code>?endpoint=http://IP:PORT/metrics</code>).
+      </p>
+    </footer>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

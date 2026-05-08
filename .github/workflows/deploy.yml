@@ -1,0 +1,24 @@
+name: Deploy Homepage
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync files to web root
+        run: |
+          sudo mkdir -p /opt/homeserver-infra/docker/app
+          sudo rsync -av --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            ./ /opt/homeserver-infra/docker/app/
+
+      - name: Set ownership
+        run: |
+          sudo chown -R akbartitowic:akbartitowic /opt/homeserver-infra/docker/app
