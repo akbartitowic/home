@@ -11,7 +11,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Sync files to web root
+      - name: Sync files to app source
         run: |
           sudo mkdir -p /opt/homeserver-infra/docker/app
           sudo rsync -av --delete \
@@ -19,6 +19,7 @@ jobs:
             --exclude ".github" \
             ./ /opt/homeserver-infra/docker/app/
 
-      - name: Set ownership
+      - name: Rebuild and restart next-home
         run: |
-          sudo chown -R akbartitowic:akbartitowic /opt/homeserver-infra/docker/app
+          cd /opt/homeserver-infra/docker
+          sudo docker compose up -d --build next-home
