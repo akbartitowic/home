@@ -1,10 +1,20 @@
 import os from "node:os";
 import { promisify } from "node:util";
 import { execFile as execFileCb } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 import { NextResponse } from "next/server";
 
 const execFile = promisify(execFileCb);
+const MBPS_DIVISOR = 1024 * 1024;
+
+let lastNetworkSample:
+  | {
+      rxBytes: number;
+      txBytes: number;
+      atMs: number;
+    }
+  | null = null;
 
 type DiskStats = {
   filesystem: string;
@@ -22,6 +32,12 @@ type GpuStats = {
   memoryTotalMiB: number | null;
   temperatureC: number | null;
   available: boolean;
+};
+
+type NetworkStats = {
+  downloadMbps: number;
+  uploadMbps: number;
+  latencyMs: number;
 };
 
 function parseDfOutput(stdout: string): DiskStats[] {
@@ -112,9 +128,81 @@ async function getCpuUsagePercent() {
   return Number((((totalDiff - idleDiff) / totalDiff) * 100).toFixed(1));
 }
 
+async function readLinuxNetworkBytes() {
+  const content = await readFile("/proc/net/dev", "utf-8");
+  const lines = content
+    .trim()
+    .split("\n")
+    .slice(2)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  let rxBytes = 0;
+  let txBytes = 0;
+  for (const line of lines) {
+    const [namePart, dataPart] = line.split(":");
+    if (!namePart || !dataPart) continue;
+    const iface = namePart.trim();
+    if (iface === "lo") continue;
+    const fields = dataPart.trim().split(/\s+/);
+    if (fields.length < 9) continue;
+    rxBytes += Number(fields[0]) || 0;
+    txBytes += Number(fields[8]) || 0;
+  }
+
+  return { rxBytes, txBytes };
+}
+
+async function getLatencyMs() {
+  try {
+    const { stdout } = await execFile("ping", ["-c", "1", "-W", "1", "1.1.1.1"]);
+    const match = stdout.match(/time=([0-9.]+)/);
+    if (!match) return 0;
+    return Number(match[1]) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function getNetworkStats(): Promise<NetworkStats> {
+  const latencyMs = await getLatencyMs();
+
+  try {
+    const current = await readLinuxNetworkBytes();
+    const now = Date.now();
+
+    if (!lastNetworkSample) {
+      lastNetworkSample = { ...current, atMs: now };
+      return { downloadMbps: 0, uploadMbps: 0, latencyMs };
+    }
+
+    const elapsedSec = Math.max((now - lastNetworkSample.atMs) / 1000, 1);
+    const rxRateBps = Math.max(current.rxBytes - lastNetworkSample.rxBytes, 0) / elapsedSec;
+    const txRateBps = Math.max(current.txBytes - lastNetworkSample.txBytes, 0) / elapsedSec;
+
+    lastNetworkSample = { ...current, atMs: now };
+    return {
+      downloadMbps: Number((rxRateBps / MBPS_DIVISOR).toFixed(2)),
+      uploadMbps: Number((txRateBps / MBPS_DIVISOR).toFixed(2)),
+      latencyMs: Number(latencyMs.toFixed(2)),
+    };
+  } catch {
+    return {
+      downloadMbps: 0,
+      uploadMbps: 0,
+      latencyMs: Number(latencyMs.toFixed(2)),
+    };
+  }
+}
+
 export async function GET() {
   try {
-    const [disks, cpuPercent, gpu] = await Promise.all([getDiskStats(), getCpuUsagePercent(), getGpuStats()]);
+    const [disks, cpuPercent, gpu, network] = await Promise.all([
+      getDiskStats(),
+      getCpuUsagePercent(),
+      getGpuStats(),
+      getNetworkStats(),
+    ]);
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
@@ -140,11 +228,7 @@ export async function GET() {
       disk: rootDisk,
       disks,
       gpu,
-      network: {
-        downloadMbps: 0,
-        uploadMbps: 0,
-        latencyMs: 0,
-      },
+      network,
       services: [
         { name: "Homepage", status: "healthy" },
       ],
