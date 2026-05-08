@@ -30,6 +30,32 @@ function statusClass(status: MetricsResponse["services"][number]["status"]) {
   return "border-red-400/40 text-red-300";
 }
 
+type StorageSummary = {
+  label: string;
+  usedBytes: number;
+  totalBytes: number;
+  availableBytes: number;
+  count: number;
+};
+
+function buildSummary(label: string, partitions: MetricsResponse["disks"]): StorageSummary {
+  return {
+    label,
+    usedBytes: partitions.reduce((acc, item) => acc + item.usedBytes, 0),
+    totalBytes: partitions.reduce((acc, item) => acc + item.totalBytes, 0),
+    availableBytes: partitions.reduce((acc, item) => acc + item.availableBytes, 0),
+    count: partitions.length,
+  };
+}
+
+function classifyDiskType(filesystem: string) {
+  const value = filesystem.toLowerCase();
+  if (value.includes("nvme") || value.includes("mmc") || value.includes("ssd")) return "ssd";
+  if (value.includes("/dev/sd") || value.includes("ata") || value.includes("sata") || value.includes("hdd"))
+    return "hdd";
+  return "other";
+}
+
 const fallbackData: MetricsResponse = {
   hostname: "homeserver.local",
   os: "Linux",
@@ -104,10 +130,17 @@ export function Dashboard() {
     () => (metrics.memory.totalBytes > 0 ? (metrics.memory.usedBytes / metrics.memory.totalBytes) * 100 : 0),
     [metrics.memory.totalBytes, metrics.memory.usedBytes],
   );
-  const diskPercent = useMemo(
-    () => (metrics.disk.totalBytes > 0 ? (metrics.disk.usedBytes / metrics.disk.totalBytes) * 100 : 0),
-    [metrics.disk.totalBytes, metrics.disk.usedBytes],
-  );
+  const storageCards = useMemo(() => {
+    const osPartitions = metrics.disks.filter((item) => item.mountpoint === "/");
+    const ssdPartitions = metrics.disks.filter((item) => classifyDiskType(item.filesystem) === "ssd");
+    const hddPartitions = metrics.disks.filter((item) => classifyDiskType(item.filesystem) === "hdd");
+
+    const osSummary = buildSummary("OS", osPartitions.length > 0 ? osPartitions : [metrics.disk]);
+    const ssdSummary = buildSummary("SSD", ssdPartitions);
+    const hddSummary = buildSummary("HDD", hddPartitions);
+
+    return [ssdSummary, hddSummary, osSummary];
+  }, [metrics.disk, metrics.disks]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-6 md:px-6">
@@ -161,18 +194,6 @@ export function Dashboard() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground"><HardDrive className="h-4 w-4" />Storage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{diskPercent.toFixed(1)}%</p>
-            <Progress value={diskPercent} />
-            <p className="text-sm text-muted-foreground">Terpakai: {formatBytes(metrics.disk.usedBytes)} / {formatBytes(metrics.disk.totalBytes)}</p>
-            <p className="text-sm text-emerald-300">Sisa: {formatBytes(metrics.disk.availableBytes)}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground"><Network className="h-4 w-4" />Network</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1.5 text-sm">
@@ -203,6 +224,29 @@ export function Dashboard() {
             </p>
           </CardContent>
         </Card>
+
+        {storageCards.map((storage) => {
+          const percent = storage.totalBytes > 0 ? (storage.usedBytes / storage.totalBytes) * 100 : 0;
+          return (
+            <Card key={storage.label}>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <HardDrive className="h-4 w-4" />
+                  Storage {storage.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-3xl font-semibold">{percent.toFixed(1)}%</p>
+                <Progress value={percent} />
+                <p className="text-sm text-muted-foreground">
+                  Terpakai: {formatBytes(storage.usedBytes)} / {formatBytes(storage.totalBytes)}
+                </p>
+                <p className="text-sm text-emerald-300">Sisa: {formatBytes(storage.availableBytes)}</p>
+                <p className="text-xs text-muted-foreground">Partisi: {storage.count}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </section>
 
       <section className="mt-4 grid gap-4 lg:grid-cols-3">
