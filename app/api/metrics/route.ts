@@ -31,7 +31,7 @@ function parseDfOutput(stdout: string): DiskStats[] {
   }
 
   const dataLines = lines.slice(1);
-  return dataLines
+  const partitions = dataLines
     .map((line) => line.trim().split(/\s+/))
     .filter((parts) => parts.length >= 6)
     .map((parts) => ({
@@ -40,11 +40,20 @@ function parseDfOutput(stdout: string): DiskStats[] {
       usedBytes: Number(parts[2]) * 1024,
       availableBytes: Number(parts[3]) * 1024,
       mountpoint: parts[5],
-    }));
+    }))
+    .filter((item) => item.mountpoint && item.totalBytes > 0);
+
+  const byMount = new Map<string, DiskStats>();
+  for (const partition of partitions) {
+    byMount.set(partition.mountpoint, partition);
+  }
+
+  return [...byMount.values()].sort((a, b) => a.mountpoint.localeCompare(b.mountpoint));
 }
 
 async function getDiskStats(): Promise<DiskStats[]> {
-  const { stdout } = await execFile("df", ["-kP"]);
+  // -a ensures all mounted filesystems are listed.
+  const { stdout } = await execFile("df", ["-kPa"]);
   return parseDfOutput(stdout);
 }
 

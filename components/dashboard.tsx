@@ -58,6 +58,17 @@ export function Dashboard() {
   const [source, setSource] = useState<"live" | "fallback">("live");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved);
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(prefersDark ? "dark" : "light");
+  }, []);
+
   const toggleTheme = useCallback(() => {
     setTheme((current) => (current === "dark" ? "light" : "dark"));
   }, []);
@@ -65,6 +76,7 @@ export function Dashboard() {
   useEffect(() => {
     document.documentElement.classList.remove("dark", "light");
     document.documentElement.classList.add(theme);
+    window.localStorage.setItem("theme", theme);
   }, [theme]);
 
   const fetchMetrics = useCallback(async () => {
@@ -104,13 +116,18 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Home Server Dashboard</h1>
           <p className="text-sm text-muted-foreground">Monitoring performa server termasuk sisa SSD/HDD</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge className={source === "live" ? "border-emerald-500/40 text-emerald-300" : "border-amber-500/40 text-amber-300"}>
             {source === "live" ? "Data live" : "Fallback"}
           </Badge>
-          <Button onClick={toggleTheme} type="button">
+          <Button
+            onClick={toggleTheme}
+            type="button"
+            className="border-border bg-background text-foreground"
+            title="Toggle light/dark mode"
+          >
             {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-            {theme === "dark" ? "Light" : "Dark"}
+            Mode: {theme === "dark" ? "Light" : "Dark"}
           </Button>
           <Button onClick={fetchMetrics} disabled={loading}>
             <RefreshCcw className="mr-2 h-4 w-4" />
